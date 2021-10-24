@@ -5,42 +5,42 @@
 Signed 32 MAX
 Int   2147483647
 Hex   0x7FFFFFFF
-BIN   1111111111111111111111111111111
+BIN   0b1111111111111111111111111111111
 OCT   017777777777
-2COMP 01111111111111111111111111111111
+2COMP 0b01111111111111111111111111111111
 
 Signed 32 MIN
 INT  -2147483648
 HEX  -0x80000000
-BIN  -10000000000000000000000000000000
+BIN  -0b10000000000000000000000000000000
 OCT  -020000000000
-2COMP 10000000000000000000000000000000
+2COMP 0b10000000000000000000000000000000
 
 Unsigned 32 MAX
 INT   4294967295
 HEX   0xFFFFFFFF
-BIN   11111111111111111111111111111111
+BIN   0b11111111111111111111111111111111
 OCT   037777777777
-2COMP 0000000000000000000000000000000011111111111111111111111111111111
+2COMP 0b0000000000000000000000000000000011111111111111111111111111111111
 
 Signed 64 MAX
 INT   9223372036854775807
 HEX   0x7FFFFFFFFFFFFFFF
-BIN   111111111111111111111111111111111111111111111111111111111111111
+BIN   0b111111111111111111111111111111111111111111111111111111111111111
 OCT   0777777777777777777777
-2COMP 0111111111111111111111111111111111111111111111111111111111111111
+2COMP 0b0111111111111111111111111111111111111111111111111111111111111111
 
 Signed 64 MIN
 INT  -9223372036854775808
 HEX  -0x8000000000000000
-BIN  -1000000000000000000000000000000000000000000000000000000000000000
+BIN  -0b1000000000000000000000000000000000000000000000000000000000000000
 OCT  -01000000000000000000000
-2COMP 1000000000000000000000000000000000000000000000000000000000000000
+2COMP 0b1000000000000000000000000000000000000000000000000000000000000000
 
 Unsigned 64 MAX
 INT   18446744073709551615
 HEX   0xFFFFFFFFFFFFFFFF
-BIN   1111111111111111111111111111111111111111111111111111111111111111
+BIN   0b1111111111111111111111111111111111111111111111111111111111111111
 OCT   01777777777777777777777
 2COMP Overflow
 */
@@ -103,11 +103,11 @@ static int         check_bin(char *number);
 static int         check_oct(char *number);
 static int         isbdigit(char c);
 static int         isodigit(char c);
-static int         bin_to_int(char *bin);
+static void        bin_to_int(char *bin);
 static void        draw_popup(void);
 static void        start_popup(yed_frame *frame, int start_len, array_t strings);
 static void        kill_popup(void);
-static char       *printBits(int num);
+static char       *printBits();
 static yed_buffer *get_or_make_buff(void);
 static int         convert_word_at_point(yed_frame *frame, int row, int col);
 static int         convert_find_size(void);
@@ -147,7 +147,6 @@ int convert_find_size(void) {
                 //s32
                 converted_word.num_int = strtol(converted_word.word, NULL, 10);
                 converted_word.data_type = signed_32;
-                print_converted_struct();
                 return 1;
             }else if(converted_word.word_len == 10) {
                 if((strncmp(converted_word.word, "2147483648", 10) <= 0 && converted_word.negative == 1)
@@ -155,27 +154,23 @@ int convert_find_size(void) {
                     //s32
                     converted_word.num_int = strtol(converted_word.word, NULL, 10);
                     converted_word.data_type = signed_32;
-                    print_converted_struct();
                     return 1;
                 }else if(strncmp(converted_word.word, "4294967295", 10) <= 0 && converted_word.negative == 0) {
                     //u32
                     converted_word.num_uint = strtoul(converted_word.word, NULL, 10);
                     converted_word.data_type = unsigned_32;
-                    print_converted_struct();
                     return 1;
                 }else{
                     //s64
                     yed_cerr("%s", converted_word.word);
                     converted_word.num_ll = strtoll(converted_word.word, NULL, 10);
                     converted_word.data_type = signed_64;
-                    print_converted_struct();
                     return 1;
                 }
             }else if(converted_word.word_len < 19) {
                 //s64
                 converted_word.num_ll = strtoll(converted_word.word, NULL, 10);
                 converted_word.data_type = signed_64;
-                print_converted_struct();
                 return 1;
             }else if(converted_word.word_len == 19) {
                 if((strncmp(converted_word.word, "9223372036854775808", 19) <= 0 && converted_word.negative == 1)
@@ -188,13 +183,11 @@ int convert_find_size(void) {
                         converted_word.num_ll = strtoll(converted_word.word, NULL, 10);
                     }
                     converted_word.data_type = signed_64;
-                    print_converted_struct();
                     return 1;
                 }else{
                     //u64
                     converted_word.num_ull = strtoull(converted_word.word, NULL, 10);
                     converted_word.data_type = unsigned_64;
-                    print_converted_struct();
                     return 1;
                 }
             }else if(converted_word.word_len == 20) {
@@ -202,7 +195,6 @@ int convert_find_size(void) {
                     //u64
                     converted_word.num_ull = strtoull(converted_word.word, NULL, 10);
                     converted_word.data_type = unsigned_64;
-                    print_converted_struct();
                     return 1;
                 }else{
                     goto overflow;
@@ -217,7 +209,6 @@ int convert_find_size(void) {
                 //s32
                 converted_word.num_int = strtol(converted_word.word, NULL, 16);
                 converted_word.data_type = signed_32;
-                print_converted_struct();
                 return 1;
             }else if(converted_word.word_len == 10) {
                 if((strncmp(converted_word.word, "0x80000000", 10) <= 0 && converted_word.negative == 1)
@@ -225,27 +216,23 @@ int convert_find_size(void) {
                     //s32
                     converted_word.num_int = strtol(converted_word.word, NULL, 16);
                     converted_word.data_type = signed_32;
-                    print_converted_struct();
                     return 1;
                 }else if(strncmp(converted_word.word, "0xFFFFFFFF", 10) <= 0 && converted_word.negative == 0) {
                     //u32
                     converted_word.num_uint = strtoul(converted_word.word, NULL, 16);
                     converted_word.data_type = unsigned_32;
-                    print_converted_struct();
                     return 1;
                 }else{
                     //s64
                     yed_cerr("%s", converted_word.word);
                     converted_word.num_ll = strtoll(converted_word.word, NULL, 16);
                     converted_word.data_type = signed_64;
-                    print_converted_struct();
                     return 1;
                 }
             }else if(converted_word.word_len < 18) {
                 //s64
                 converted_word.num_ll = strtoll(converted_word.word, NULL, 16);
                 converted_word.data_type = signed_64;
-                print_converted_struct();
                 return 1;
             }else if(converted_word.word_len == 18) {
                 if((strncmp(converted_word.word, "0x8000000000000000", 18) <= 0 && converted_word.negative == 1)
@@ -258,34 +245,119 @@ int convert_find_size(void) {
                         converted_word.num_ll = strtoll(converted_word.word, NULL, 16);
                     }
                     converted_word.data_type = signed_64;
-                    print_converted_struct();
                     return 1;
                 }else if(strncmp(converted_word.word, "0xFFFFFFFFFFFFFFFF", 18) <= 0 && converted_word.negative == 0) {
                     //u64
                     converted_word.num_ull = strtoull(converted_word.word, NULL, 16);
                     converted_word.data_type = unsigned_64;
-                    print_converted_struct();
                     return 1;
                 }
-/*             }else if(converted_word.word_len == 20) { */
-/*                 if(strncmp(converted_word.word, "0xFFFFFFFFFFFFFFFF", 20) <= 0 && converted_word.negative == 0) { */
-/*                     //u64 */
-/*                     converted_word.num_ull = strtoull(converted_word.word, NULL, 16); */
-/*                     converted_word.data_type = unsigned_64; */
-/*                     print_converted_struct(); */
-/*                     return 1; */
-/*                 }else{ */
-/*                     goto overflow; */
-/*                 } */
             }else{
                 goto overflow;
             }
             break;
 
         case binary:
+            if(converted_word.word_len <= 33) {
+                //s32
+                converted_word.data_type = signed_32;
+                bin_to_int(converted_word.word);
+                return 1;
+            }else if(converted_word.word_len == 34) {
+                if(strncmp(converted_word.word, "10000000000000000000000000000000", 34) <= 0 && converted_word.negative == 1) {
+                    //s32
+                    converted_word.data_type = signed_32;
+                    bin_to_int(converted_word.word);
+                    return 1;
+                }else {
+                    //u32
+                    converted_word.data_type = unsigned_32;
+                    bin_to_int(converted_word.word);
+                    return 1;
+                }
+            }else if(converted_word.word_len <= 65) {
+                //s64
+                converted_word.data_type = signed_64;
+                bin_to_int(converted_word.word);
+                return 1;
+            }else if(converted_word.word_len == 66) {
+                if(strncmp(converted_word.word, "1000000000000000000000000000000000000000000000000000000000000000", 64) <= 0 && converted_word.negative == 1) {
+                    //s64
+                    converted_word.data_type = signed_64;
+                    bin_to_int(converted_word.word);
+                    return 1;
+                }else{
+                    //u64
+                    converted_word.data_type = unsigned_64;
+                    bin_to_int(converted_word.word);
+                    return 1;
+                }
+            }else{
+                goto overflow;
+            }
             break;
 
         case octal:
+            if(converted_word.word_len < 12) {
+                //s32
+                converted_word.num_int = strtol(converted_word.word, NULL, 8);
+                converted_word.data_type = signed_32;
+                return 1;
+            }else if(converted_word.word_len == 12) {
+                if((strncmp(converted_word.word, "020000000000", 12) <= 0 && converted_word.negative == 1)
+                || (strncmp(converted_word.word, "017777777777", 12) <= 0 && converted_word.negative == 0)) {
+                    //s32
+                    converted_word.num_int = strtol(converted_word.word, NULL, 8);
+                    converted_word.data_type = signed_32;
+                    return 1;
+                }else if(strncmp(converted_word.word, "037777777777", 12) <= 0 && converted_word.negative == 0) {
+                    //u32
+                    converted_word.num_uint = strtoul(converted_word.word, NULL, 8);
+                    converted_word.data_type = unsigned_32;
+                    return 1;
+                }else{
+                    //s64
+                    yed_cerr("%s", converted_word.word);
+                    converted_word.num_ll = strtoll(converted_word.word, NULL, 8);
+                    converted_word.data_type = signed_64;
+                    return 1;
+                }
+            }else if(converted_word.word_len < 22) {
+                //s64
+                converted_word.num_ll = strtoll(converted_word.word, NULL, 8);
+                converted_word.data_type = signed_64;
+                return 1;
+            }else if(converted_word.word_len == 22) {
+                if(strncmp(converted_word.word, "0777777777777777777777", 22) <= 0 && converted_word.negative == 0) {
+                    converted_word.num_ll = strtoll(converted_word.word, NULL, 8);
+                    converted_word.data_type = signed_64;
+                    return 1;
+                }else if(strncmp(converted_word.word, "01777777777777777777777", 23) <= 0 && converted_word.negative == 0) {
+                    //u64
+                    converted_word.num_ull = strtoull(converted_word.word, NULL, 8);
+                    converted_word.data_type = unsigned_64;
+                    return 1;
+                }
+            }else if(converted_word.word_len == 23) {
+                if(strncmp(converted_word.word, "01000000000000000000000", 23) <= 0 && converted_word.negative == 1) {
+                    //s64
+                    if(strncmp(converted_word.word, "01000000000000000000000", 23) <= 0 && converted_word.negative == 1) {
+                        snprintf(tmp_buff, 512, "-%s", converted_word.word);
+                        converted_word.num_ll = strtoll(tmp_buff, NULL, 8);
+                    }else{
+                        converted_word.num_ll = strtoll(converted_word.word, NULL, 8);
+                    }
+                    converted_word.data_type = signed_64;
+                    return 1;
+                }else if(strncmp(converted_word.word, "01777777777777777777777", 23) <= 0 && converted_word.negative == 0) {
+                    //u64
+                    converted_word.num_ull = strtoull(converted_word.word, NULL, 8);
+                    converted_word.data_type = unsigned_64;
+                    return 1;
+                }
+            }else{
+                goto overflow;
+            }
             break;
 
         default:
@@ -349,7 +421,6 @@ void convert_number(int nargs, char** args) {
     if(convert_word_at_point(frame, frame->cursor_line, frame->cursor_col) == 0) {
         return;
     }
-    print_converted_struct();
 
     if(popup.is_up) {
         yed_cerr("Convert popup is already up!");
@@ -377,7 +448,6 @@ void convert_number(int nargs, char** args) {
     }
 
     LOG_FN_ENTER();
-    yed_cprint("data_type:%d len:%d\n", converted_word.data_type, converted_word.word_len);
     if(converted_word.data_type == signed_32) {
         yed_cprint("%d converted to int32_t from %s.", converted_word.num_int, num_type_arr[converted_word.number_type]);
     }else if(converted_word.data_type == unsigned_32) {
@@ -413,7 +483,7 @@ void convert_number(int nargs, char** args) {
     item = strdup(buffer); array_push(popup_items, item);
 
 /*  Binary */
-    item = printBits(number); array_push(converted_items, item);
+    item = printBits(); array_push(converted_items, item);
     snprintf(buffer, 512, "%11s: %-20s", num_type_arr[2], *((char **)array_item(converted_items, 2)));
     item = strdup(buffer); array_push(popup_items, item);
 
@@ -652,29 +722,94 @@ void key_handler(yed_event *event) {
     }
 }
 
+//1
+//-112345
+
 // Assumes little endian
-char *printBits(int num) {
-    char ret[34];
+char *printBits() {
+    char ret[67];
     int first = 0;
     int j = 0;
 
+    if(converted_word.negative == 1) {
+        ret[j] = '-';
+        j++;
+    }
     ret[j] = '0';
     j++;
     ret[j] = 'b';
     j++;
 
-    for(int i=31; i>=0; i--) {
-        if(((num & (1<<i))>>i) == 1) {
-            ret[j] = '1';
-            first = 1;
-            j++;
-        }else if(first){
-            ret[j] = '0';
-            j++;
+    if(converted_word.data_type == signed_32) {
+        for(int i=31; i>=0; i--) {
+            if(((converted_word.num_int & ((int64_t)1<<i))>>i) == 1) {
+                ret[j] = '1';
+                first = 1;
+                j++;
+            }else if(first){
+                ret[j] = '0';
+                j++;
+            }
+        }
+    }else if(converted_word.data_type == unsigned_32) {
+        for(int i=31; i>=0; i--) {
+            if(((converted_word.num_uint & ((uint32_t)1<<i))>>i) == 1) {
+                ret[j] = '1';
+                first = 1;
+                j++;
+            }else if(first){
+                ret[j] = '0';
+                j++;
+            }
+        }
+    }else if(converted_word.data_type == signed_64) {
+        for(int i=63; i>=0; i--) {
+            if(((converted_word.num_ll & ((uint64_t)1<<i))>>i) == 1) {
+                ret[j] = '1';
+                first = 1;
+                j++;
+            }else if(first){
+                ret[j] = '0';
+                j++;
+            }
+        }
+    }else if(converted_word.data_type == unsigned_64) {
+        for(int i=63; i>=0; i--) {
+            if(((converted_word.num_ull & ((uint64_t)1<<i))>>i) == 1) {
+                ret[j] = '1';
+                first = 1;
+                j++;
+            }else if(first){
+                ret[j] = '0';
+                j++;
+            }
         }
     }
+
     ret[j] = '\0';
     return strdup(ret);
+
+/*     char ret[34]; */
+/*     int first = 0; */
+/*     int j = 0; */
+/*  */
+/*     ret[j] = '0'; */
+/*     j++; */
+/*     ret[j] = 'b'; */
+/*     j++; */
+/*  */
+/*     for(int i=31; i>=0; i--) { */
+/*         if(((num & (1<<i))>>i) == 1) { */
+/*             ret[j] = '1'; */
+/*             first = 1; */
+/*             j++; */
+/*         }else if(first){ */
+/*             ret[j] = '0'; */
+/*             j++; */
+/*         } */
+/*     } */
+/*     ret[j] = '\0'; */
+/*     return strdup(ret); */
 }
 
 /* check_int: checks if cstring is an int
@@ -800,19 +935,41 @@ int isodigit(char c) {
     return ret;
 }
 
-int bin_to_int(char *bin) {
+void bin_to_int(char *bin) {
     int num = 0;
     int i = 0;
 
     bin = bin+2;
 
-    while(bin[i] != '\0') {
-        if(bin[i] == '1') {
-            num += pow(2, strlen(bin)-i-1);
+    if(converted_word.data_type == signed_32) {
+        while(bin[i] != '\0') {
+            if(bin[i] == '1') {
+                converted_word.num_int += pow(2, strlen(bin)-i-1);
+            }
+            i++;
         }
-        i++;
+    }else if(converted_word.data_type == unsigned_32) {
+        while(bin[i] != '\0') {
+            if(bin[i] == '1') {
+                converted_word.num_uint += pow(2, strlen(bin)-i-1);
+            }
+            i++;
+        }
+    }else if(converted_word.data_type == signed_64) {
+        while(bin[i] != '\0') {
+            if(bin[i] == '1') {
+                converted_word.num_ll += pow(2, strlen(bin)-i-1);
+            }
+            i++;
+        }
+    }else if(converted_word.data_type == unsigned_64) {
+        while(bin[i] != '\0') {
+            if(bin[i] == '1') {
+                converted_word.num_ull += pow(2, strlen(bin)-i-1);
+            }
+            i++;
+        }
     }
-    return num;
 }
 
 static void kill_popup(void) {
