@@ -115,6 +115,7 @@ static void        init_convert(void);
 static void        print_converted_struct(void);
 static char       *snprintf_int(char *tmp_buffer);
 static char       *snprintf_hex(char *tmp_buffer);
+static char       *snprintf_oct(char *tmp_buffer);
 
 /* Event Handlers */
 static void key_handler(yed_event *event);
@@ -402,24 +403,24 @@ void convert_number(int nargs, char** args) {
 /*  Integer */
     memcpy(tmp_buffer, snprintf_int(tmp_buffer), 512);
     item = strdup(tmp_buffer); array_push(converted_items, item);
-    snprintf(buffer, 512, "%11s: %20s", data_type_arr[converted_word.data_type], *((char **)array_item(converted_items, 0)));
+    snprintf(buffer, 512, "%11s: %-20s", data_type_arr[converted_word.data_type], *((char **)array_item(converted_items, 0)));
     item = strdup(buffer); array_push(popup_items, item);
 
 /*  Hexadecimal     */
     memcpy(tmp_buffer, snprintf_hex(tmp_buffer), 512);
     item = strdup(tmp_buffer); array_push(converted_items, item);
-    snprintf(buffer, 512, "%11s: %20s", num_type_arr[1], *((char **)array_item(converted_items, 1)));
+    snprintf(buffer, 512, "%11s: %-20s", num_type_arr[1], *((char **)array_item(converted_items, 1)));
     item = strdup(buffer); array_push(popup_items, item);
 
 /*  Binary */
     item = printBits(number); array_push(converted_items, item);
-    snprintf(buffer, 512, "%11s: %20s", num_type_arr[2], *((char **)array_item(converted_items, 2)));
+    snprintf(buffer, 512, "%11s: %-20s", num_type_arr[2], *((char **)array_item(converted_items, 2)));
     item = strdup(buffer); array_push(popup_items, item);
 
 /*  Octal */
-    snprintf(tmp_buffer, 512, "0%o", number);
+    memcpy(tmp_buffer, snprintf_oct(tmp_buffer), 512);
     item = strdup(tmp_buffer); array_push(converted_items, item);
-    snprintf(buffer, 512, "%11s: %20s", num_type_arr[3], *((char **)array_item(converted_items, 3)));
+    snprintf(buffer, 512, "%11s: %-20s", num_type_arr[3], *((char **)array_item(converted_items, 3)));
     item = strdup(buffer); array_push(popup_items, item);
 
     popup.size = array_len(popup_items);
@@ -503,6 +504,29 @@ char *snprintf_hex(char *tmp_buffer) {
         }
     }else if(converted_word.data_type == unsigned_64) {
         snprintf(tmp_buffer, 512, "0x%" PRIX64 "", converted_word.num_ull);
+    }
+
+    return tmp_buffer;
+}
+
+char *snprintf_oct(char *tmp_buffer) {
+    char buff[512];
+    if(converted_word.data_type == signed_32) {
+        if(converted_word.negative == 1) {
+            snprintf(tmp_buffer, 512, "-0%o", converted_word.num_int);
+        }else{
+            snprintf(tmp_buffer, 512, "0%o", converted_word.num_int);
+        }
+    }else if(converted_word.data_type == unsigned_32) {
+        snprintf(tmp_buffer, 512, "0%o", converted_word.num_uint);
+    }else if(converted_word.data_type == signed_64) {
+        if(converted_word.negative == 1) {
+            snprintf(tmp_buffer, 512, "-0%" PRIo64  "", converted_word.num_ll);
+        }else{
+            snprintf(tmp_buffer, 512, "0%" PRIo64 "", converted_word.num_ll);
+        }
+    }else if(converted_word.data_type == unsigned_64) {
+        snprintf(tmp_buffer, 512, "0%" PRIo64  "", converted_word.num_ull);
     }
 
     return tmp_buffer;
