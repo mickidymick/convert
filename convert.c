@@ -43,6 +43,10 @@ HEX   0xFFFFFFFFFFFFFFFF
 BIN   0b1111111111111111111111111111111111111111111111111111111111111111
 OCT   01777777777777777777777
 2COMP Overflow
+
+Uppercase
+loWERCASE
+camelCase_oopsTHINGS_GETmessySometimes
 */
 
 typedef struct {
@@ -62,7 +66,8 @@ static enum {
     integer,
     hexadecimal,
     binary,
-    octal
+    octal,
+    twoscomp
 } n_type;
 
 static enum {
@@ -73,21 +78,22 @@ static enum {
 } d_type;
 
 typedef struct {
-    char               word[512];   //the number as a string
-    int                word_start;  //col the number starts on
-    int                word_len;    //the length of the word
-    int                row;         //row the number is on
-    int                negative;    //0 not negative 1 negative
-    int                number_type; //n_type
-    int                data_type;   //d_type
-    unsigned long long num_ull;     //stored number u64
-    long long          num_ll;      //stored number s64
-    unsigned int       num_uint;    //stored number u32
-    int                num_int;     //stored number s32
-
+    char     word[512];   //the number as a string
+    int      word_start;  //col the number starts on
+    int      word_len;    //the length of the word
+    int      row;         //row the number is on
+    int      negative;    //0 not negative 1 negative
+    int      number_type; //n_type
+    int      data_type;   //d_type
+    int      is_word;     //if its a number or a word
+    uint64_t num_ull;     //stored number u64
+    int64_t  num_ll;      //stored number s64
+    uint32_t num_uint;    //stored number u32
+    int32_t  num_int;     //stored number s32
 } convert_word;
 
-static char             *num_type_arr[5] = {"integer", "hexadecimal", "binary", "octal", "error"};
+static char             *word_type_arr[6] = {"uppercase", "lowercase", "snakecase", "camelcase", "error"};
+static char             *num_type_arr[6] = {"integer", "hexadecimal", "binary", "octal", "2scomp", "error"};
 static char             *data_type_arr[5] = {"unsigned_64", "signed_64", "unsigned_32", "signed_32", "error"};
 static convert_popup_t   popup;
 static array_t           popup_items;
@@ -107,9 +113,11 @@ static void        bin_to_int(char *bin);
 static void        draw_popup(void);
 static void        start_popup(yed_frame *frame, int start_len, array_t strings);
 static void        kill_popup(void);
-static char       *printBits();
+static char       *print_bits();
+static char       *print_twos_bits();
 static yed_buffer *get_or_make_buff(void);
 static int         convert_word_at_point(yed_frame *frame, int row, int col);
+static int         convert_word_at_point_2(yed_frame *frame, int row, int col);
 static int         convert_find_size(void);
 static void        init_convert(void);
 static void        print_converted_struct(void);
@@ -368,21 +376,16 @@ int convert_find_size(void) {
     //Overflow
     if(0) {
 overflow:;
-        yed_cerr("Number to convert is too large.");
+/*         yed_cerr("Number to convert is too large."); */
         return 0;
     }
 
     //Not a number
     if(0) {
 no_num:;
-        yed_cerr("String can not be converted into a number.");
+/*         yed_cerr("String can not be converted into a number."); */
         return 0;
     }
-
-/*     number = strtol(converted_word.word, NULL, 10); */
-/*     number = strtol(converted_word.word, NULL, 16); */
-/*     number = bin_to_int(converted_word.word); */
-/*     number = strtol(converted_word.word, NULL, 8); */
 
     LOG_EXIT();
     return 1;
@@ -405,9 +408,13 @@ void init_convert(void) {
 
 void convert_number(int nargs, char** args) {
     char *item;
+    char  buffer[512];
+    char  tmp_buffer[512];
     int   number;
     int   number_type;
-
+    int   word_break;
+    int   uppercase_last;
+    int   extra;
     yed_frame *frame;
 
     frame = ys->active_frame;
@@ -443,67 +450,165 @@ void convert_number(int nargs, char** args) {
         converted_word.number_type = octal;
     }
 
-    if(convert_find_size() == 0) {
+    if(convert_find_size() == 1) {
+        LOG_FN_ENTER();
+        if(converted_word.data_type == signed_32) {
+            yed_cprint("%d converted to int32_t from %s.", converted_word.num_int, num_type_arr[converted_word.number_type]);
+        }else if(converted_word.data_type == unsigned_32) {
+            yed_cprint("%u converted to uint32_t from %s.", converted_word.num_uint, num_type_arr[converted_word.number_type]);
+        }else if(converted_word.data_type == signed_64) {
+            yed_cprint("%lld converted to int64_t from %s.", converted_word.num_ll, num_type_arr[converted_word.number_type]);
+        }else if(converted_word.data_type == unsigned_64) {
+            yed_cprint("%llu converted to uint64_t from %s.", converted_word.num_ull, num_type_arr[converted_word.number_type]);
+        }
+        LOG_EXIT();
+
+        while(array_len(popup_items) > 0) {
+            array_pop(popup_items);
+        }
+
+        while(array_len(converted_items) > 0) {
+            array_pop(converted_items);
+        }
+
+    /*  Integer */
+        memcpy(tmp_buffer, snprintf_int(tmp_buffer), 512);
+        item = strdup(tmp_buffer); array_push(converted_items, item);
+        snprintf(buffer, 512, "%11s: %-20s", data_type_arr[converted_word.data_type], *((char **)array_item(converted_items, 0)));
+        item = strdup(buffer); array_push(popup_items, item);
+
+    /*  Hexadecimal     */
+        memcpy(tmp_buffer, snprintf_hex(tmp_buffer), 512);
+        item = strdup(tmp_buffer); array_push(converted_items, item);
+        snprintf(buffer, 512, "%11s: %-20s", num_type_arr[1], *((char **)array_item(converted_items, 1)));
+        item = strdup(buffer); array_push(popup_items, item);
+
+    /*  Binary */
+        item = print_bits(); array_push(converted_items, item);
+        snprintf(buffer, 512, "%11s: %-20s", num_type_arr[2], *((char **)array_item(converted_items, 2)));
+        item = strdup(buffer); array_push(popup_items, item);
+
+    /*  Octal */
+        memcpy(tmp_buffer, snprintf_oct(tmp_buffer), 512);
+        item = strdup(tmp_buffer); array_push(converted_items, item);
+        snprintf(buffer, 512, "%11s: %-20s", num_type_arr[3], *((char **)array_item(converted_items, 3)));
+        item = strdup(buffer); array_push(popup_items, item);
+
+    /*  Twos Compliment */
+        item = print_twos_bits(); array_push(converted_items, item);
+        snprintf(buffer, 512, "%11s: %-20s", num_type_arr[4], *((char **)array_item(converted_items, 4)));
+        item = strdup(buffer); array_push(popup_items, item);
+
+        popup.size = array_len(popup_items);
+
+        if (ys->active_frame->cur_y + popup.size >= ys->active_frame->top + ys->active_frame->height) {
+            popup.row = ys->active_frame->cur_y - popup.size - 1;
+        } else {
+            popup.row = ys->active_frame->cur_y;
+        }
+        popup.cursor_col = ys->active_frame->cursor_col;
+
+        start_popup(frame, array_len(popup_items), popup_items);
+        popup.is_up = 1;
+        return;
+    }else if(convert_word_at_point_2(frame, frame->cursor_line, frame->cursor_col) == 1) {
+        while(array_len(popup_items) > 0) {
+            array_pop(popup_items);
+        }
+
+        while(array_len(converted_items) > 0) {
+            array_pop(converted_items);
+        }
+
+    /*  Uppercase */
+        memcpy(tmp_buffer, converted_word.word, 512);
+        for(int i=0; i<converted_word.word_len; i++) {
+            tmp_buffer[i] = toupper(tmp_buffer[i]);
+        }
+        item = strdup(tmp_buffer); array_push(converted_items, item);
+        snprintf(buffer, 512, "%11s: %-20s", word_type_arr[0], *((char **)array_item(converted_items, 0)));
+        item = strdup(buffer); array_push(popup_items, item);
+
+    /*  Lowercase     */
+        memcpy(tmp_buffer, converted_word.word, 512);
+        for(int i=0; i<converted_word.word_len; i++) {
+            tmp_buffer[i] = tolower(tmp_buffer[i]);
+        }
+        item = strdup(tmp_buffer); array_push(converted_items, item);
+        snprintf(buffer, 512, "%11s: %-20s", word_type_arr[1], *((char **)array_item(converted_items, 1)));
+        item = strdup(buffer); array_push(popup_items, item);
+
+    /*  Snakecase */
+        word_break = 0;
+        uppercase_last = 0;
+        extra = 0;
+        memcpy(tmp_buffer, converted_word.word, 512);
+        for(int i=0; i<converted_word.word_len+extra; i++) {
+            if(tmp_buffer[i] >= 'A' && tmp_buffer[i] <= 'Z') {
+                if(uppercase_last == 1) {
+                    tmp_buffer[i] = tolower(tmp_buffer[i]);
+                }else if(i == 0) {
+                    tmp_buffer[i] = tolower(tmp_buffer[i]);
+                }else{
+                    tmp_buffer[i] = tolower(tmp_buffer[i]);
+                    for(int j=converted_word.word_len+extra+2; j>i; j--) {
+                        tmp_buffer[j] = tmp_buffer[j-1];
+                    }
+                    tmp_buffer[i] = '_';
+                    extra++;
+                    i++;
+                }
+                uppercase_last = 1;
+            }else if(tmp_buffer[i] >= 'a' && tmp_buffer[i] <= 'z') {
+                uppercase_last = 0;
+            }
+        }
+        item = strdup(tmp_buffer); array_push(converted_items, item);
+        snprintf(buffer, 512, "%11s: %-20s", word_type_arr[2], *((char **)array_item(converted_items, 2)));
+        item = strdup(buffer); array_push(popup_items, item);
+
+    /*  Camelcase */
+        word_break = 0;
+        uppercase_last = 0;
+        extra = 0;
+        memcpy(tmp_buffer, converted_word.word, 512);
+        for(int i=0; i<converted_word.word_len-extra; i++) {
+            if(tmp_buffer[i] >= 'A' && tmp_buffer[i] <= 'Z') {
+                if(uppercase_last == 1) {
+                    tmp_buffer[i] = tolower(tmp_buffer[i]);
+                }else if(i == 0) {
+                    tmp_buffer[i] = tolower(tmp_buffer[i]);
+                }
+                uppercase_last = 1;
+            }else if(tmp_buffer[i] >= 'a' && tmp_buffer[i] <= 'z') {
+                uppercase_last = 0;
+            }else if(tmp_buffer[i] == '_') {
+                for(int j=i; j<converted_word.word_len-extra; j++) {
+                    tmp_buffer[j] = tmp_buffer[j+1];
+                }
+                tmp_buffer[i] = toupper(tmp_buffer[i]);
+            }
+        }
+        item = strdup(tmp_buffer); array_push(converted_items, item);
+        snprintf(buffer, 512, "%11s: %-20s", word_type_arr[3], *((char **)array_item(converted_items, 3)));
+        item = strdup(buffer); array_push(popup_items, item);
+
+        popup.size = array_len(popup_items);
+
+        if (ys->active_frame->cur_y + popup.size >= ys->active_frame->top + ys->active_frame->height) {
+            popup.row = ys->active_frame->cur_y - popup.size - 1;
+        } else {
+            popup.row = ys->active_frame->cur_y;
+        }
+        popup.cursor_col = ys->active_frame->cursor_col;
+
+        start_popup(frame, array_len(popup_items), popup_items);
+        popup.is_up = 1;
+        return;
+
+    }else{
         return;
     }
-
-    LOG_FN_ENTER();
-    if(converted_word.data_type == signed_32) {
-        yed_cprint("%d converted to int32_t from %s.", converted_word.num_int, num_type_arr[converted_word.number_type]);
-    }else if(converted_word.data_type == unsigned_32) {
-        yed_cprint("%u converted to uint32_t from %s.", converted_word.num_uint, num_type_arr[converted_word.number_type]);
-    }else if(converted_word.data_type == signed_64) {
-        yed_cprint("%lld converted to int64_t from %s.", converted_word.num_ll, num_type_arr[converted_word.number_type]);
-    }else if(converted_word.data_type == unsigned_64) {
-        yed_cprint("%llu converted to uint64_t from %s.", converted_word.num_ull, num_type_arr[converted_word.number_type]);
-    }
-    LOG_EXIT();
-
-    while(array_len(popup_items) > 0) {
-        array_pop(popup_items);
-    }
-
-    while(array_len(converted_items) > 0) {
-        array_pop(converted_items);
-    }
-
-    char buffer[512];
-    char tmp_buffer[512];
-
-/*  Integer */
-    memcpy(tmp_buffer, snprintf_int(tmp_buffer), 512);
-    item = strdup(tmp_buffer); array_push(converted_items, item);
-    snprintf(buffer, 512, "%11s: %-20s", data_type_arr[converted_word.data_type], *((char **)array_item(converted_items, 0)));
-    item = strdup(buffer); array_push(popup_items, item);
-
-/*  Hexadecimal     */
-    memcpy(tmp_buffer, snprintf_hex(tmp_buffer), 512);
-    item = strdup(tmp_buffer); array_push(converted_items, item);
-    snprintf(buffer, 512, "%11s: %-20s", num_type_arr[1], *((char **)array_item(converted_items, 1)));
-    item = strdup(buffer); array_push(popup_items, item);
-
-/*  Binary */
-    item = printBits(); array_push(converted_items, item);
-    snprintf(buffer, 512, "%11s: %-20s", num_type_arr[2], *((char **)array_item(converted_items, 2)));
-    item = strdup(buffer); array_push(popup_items, item);
-
-/*  Octal */
-    memcpy(tmp_buffer, snprintf_oct(tmp_buffer), 512);
-    item = strdup(tmp_buffer); array_push(converted_items, item);
-    snprintf(buffer, 512, "%11s: %-20s", num_type_arr[3], *((char **)array_item(converted_items, 3)));
-    item = strdup(buffer); array_push(popup_items, item);
-
-    popup.size = array_len(popup_items);
-
-    if (ys->active_frame->cur_y + popup.size >= ys->active_frame->top + ys->active_frame->height) {
-        popup.row = ys->active_frame->cur_y - popup.size - 1;
-    } else {
-        popup.row = ys->active_frame->cur_y;
-    }
-    popup.cursor_col = ys->active_frame->cursor_col;
-
-    start_popup(frame, array_len(popup_items), popup_items);
-    popup.is_up = 1;
 }
 
 yed_buffer *get_or_make_buff(void) {
@@ -661,6 +766,82 @@ int convert_word_at_point(yed_frame *frame, int row, int col) {
     converted_word.word_len = word_len;
     converted_word.row = row;
     converted_word.negative = neg;
+    converted_word.is_word = 0;
+    return 1;
+}
+
+int convert_word_at_point_2(yed_frame *frame, int row, int col) {
+    yed_buffer *buff;
+    yed_line   *line;
+    int         word_len;
+    char        c, *word_start, *ret;
+    int         word_column;
+
+    if (frame == NULL || frame->buffer == NULL) { return 0; }
+
+    buff = frame->buffer;
+
+    line = yed_buff_get_line(buff, row);
+    if (!line) { return 0; }
+
+    if (col == line->visual_width + 1) { return 0; }
+
+    c = ((yed_glyph*)yed_line_col_to_glyph(line, col))->c;
+
+    if (isspace(c)) { return 0; }
+
+    word_len = 0;
+
+    if (isalnum(c) || c == '_') {
+        while (col > 1) {
+            c = ((yed_glyph*)yed_line_col_to_glyph(line, col - 1))->c;
+
+            if (!isalnum(c) && c != '_') {
+                break;
+            }
+
+            col -= 1;
+        }
+        word_start = array_item(line->chars, yed_line_col_to_idx(line, col));
+        word_column = col;
+        c = ((yed_glyph*)yed_line_col_to_glyph(line, col))->c;
+        while (col <= line->visual_width
+        &&    (isalnum(c) || c == '_')) {
+
+            word_len += 1;
+            col      += 1;
+            c         = ((yed_glyph*)yed_line_col_to_glyph(line, col))->c;
+        }
+    } else {
+        while (col > 1) {
+            c = ((yed_glyph*)yed_line_col_to_glyph(line, col - 1))->c;
+
+            if (isalnum(c) || c == '_' || isspace(c)) {
+                break;
+            }
+
+            col -= 1;
+        }
+        word_start  = array_item(line->chars, yed_line_col_to_idx(line, col));
+        word_column = col;
+        c           = ((yed_glyph*)yed_line_col_to_glyph(line, col))->c;
+        while (col <= line->visual_width
+        &&    (!isalnum(c) && c != '_' && !isspace(c))) {
+
+            word_len += 1;
+            col      += 1;
+            c         = ((yed_glyph*)yed_line_col_to_glyph(line, col))->c;
+        }
+    }
+
+    memcpy(converted_word.word, word_start, word_len);
+    converted_word.word[word_len] = 0;
+    converted_word.word_start = word_column;
+    converted_word.word_len = word_len;
+    converted_word.row = row;
+    converted_word.negative = -1;
+    converted_word.is_word = 1;
+    print_converted_struct();
     return 1;
 }
 
@@ -687,22 +868,26 @@ void key_handler(yed_event *event) {
 /*      add replace stuff here */
         if(converted_word.word == NULL) { return;}
 
-        LOG_FN_ENTER();
-        yed_cprint("HERE:%s col:%d len:%d row:%d", converted_word.word, converted_word.word_start, converted_word.word_len, converted_word.row);
-        yed_cprint("selected:%s", *((char **)array_item(converted_items, popup.selection)));
-        LOG_EXIT();
+        if(converted_word.is_word == 0) {
+            word_len   = converted_word.word_len;
+            word_start = converted_word.word_start;
+            if(converted_word.negative == 1) {
+                word_len++;
+                word_start--;
+            }
 
-        word_len   = converted_word.word_len;
-        word_start = converted_word.word_start;
-        if(converted_word.negative == 1) {
-            word_len++;
-            word_start--;
+            for(int i=word_start+word_len-1; i>word_start-1; i--) {
+                yed_delete_from_line(frame->buffer, converted_word.row, i);
+            }
+            yed_buff_insert_string(frame->buffer, *((char **)array_item(converted_items, popup.selection)), converted_word.row, word_start);
+        }else {
+            word_len   = converted_word.word_len;
+            word_start = converted_word.word_start;
+            for(int i=word_start+word_len-1; i>word_start-1; i--) {
+                yed_delete_from_line(frame->buffer, converted_word.row, i);
+            }
+            yed_buff_insert_string(frame->buffer, *((char **)array_item(converted_items, popup.selection)), converted_word.row, word_start);
         }
-
-        for(int i=word_start+word_len-1; i>word_start-1; i--) {
-            yed_delete_from_line(frame->buffer, converted_word.row, i);
-        }
-        yed_buff_insert_string(frame->buffer, *((char **)array_item(converted_items, popup.selection)), converted_word.row, word_start);
     }else if(event->key == ARROW_UP) {
         event->cancel = 1;
         if(popup.selection > 0) {
@@ -722,11 +907,8 @@ void key_handler(yed_event *event) {
     }
 }
 
-//1
-//-112345
-
 // Assumes little endian
-char *printBits() {
+char *print_bits() {
     char ret[67];
     int first = 0;
     int j = 0;
@@ -788,28 +970,98 @@ char *printBits() {
 
     ret[j] = '\0';
     return strdup(ret);
+}
 
-/*     char ret[34]; */
-/*     int first = 0; */
-/*     int j = 0; */
-/*  */
-/*     ret[j] = '0'; */
-/*     j++; */
-/*     ret[j] = 'b'; */
-/*     j++; */
-/*  */
-/*     for(int i=31; i>=0; i--) { */
-/*         if(((num & (1<<i))>>i) == 1) { */
-/*             ret[j] = '1'; */
-/*             first = 1; */
-/*             j++; */
-/*         }else if(first){ */
-/*             ret[j] = '0'; */
+// Assumes little endian
+char *print_twos_bits() {
+    char ret[67];
+    int  first   = 0;
+    int  j       = 0;
+    int  add_one = 1;
+    int  changed = 1;
+    int  carry   = 0;
+
+    if(converted_word.negative == 1) {
+        ret[j] = '-';
+        j++;
+    }
+    ret[j] = '0';
+    j++;
+    ret[j] = 'b';
+    j++;
+    if(converted_word.data_type == signed_32) {
+        for(int i=31; i>=0; i--) {
+            if(((converted_word.num_int & ((int64_t)1<<i))>>i) == 1 && first) {
+                ret[j] = '0';
+                j++;
+            }else {
+                ret[j] = '1';
+                first = 1;
+                j++;
+            }
+        }
+
+        for(int i=j; i>2; i--) {
+/*             yed_cerr("num:%d char:%c  ", i, ret[i]); */
+            if(changed == 1) {
+                if(ret[i] == '0') {
+                    ret[i] = '1';
+                    changed = 0;
+                }else if(ret[i] == '1'){
+                    ret[i] = '0';
+                    changed = 1;
+                    if(i == 3) {
+                        carry = 1;
+                    }
+                }
+            }
+/*             yed_cerr("num:%d char:%c\n", i, ret[i]); */
+        }
+/*         if(carry == 1) { */
+/*             ret[j] == '1'; */
 /*             j++; */
 /*         } */
-/*     } */
-/*     ret[j] = '\0'; */
-/*     return strdup(ret); */
+        ret[j] = '\0';
+
+    }else if(converted_word.data_type == unsigned_32) {
+        for(int i=31; i>=0; i--) {
+            if(((converted_word.num_uint & ((uint32_t)1<<i))>>i) == 1) {
+                ret[j] = '0';
+                first = 1;
+                j++;
+            }else if(first){
+                ret[j] = '1';
+                j++;
+            }
+        }
+        ret[j] = '\0';
+    }else if(converted_word.data_type == signed_64) {
+        for(int i=63; i>=0; i--) {
+            if(((converted_word.num_ll & ((uint64_t)1<<i))>>i) == 1) {
+                ret[j] = '0';
+                first = 1;
+                j++;
+            }else if(first){
+                ret[j] = '1';
+                j++;
+            }
+        }
+        ret[j] = '\0';
+    }else if(converted_word.data_type == unsigned_64) {
+        for(int i=63; i>=0; i--) {
+            if(((converted_word.num_ull & ((uint64_t)1<<i))>>i) == 1) {
+                ret[j] = '0';
+                first = 1;
+                j++;
+            }else if(first){
+                ret[j] = '1';
+                j++;
+            }
+        }
+        ret[j] = '\0';
+    }
+
+    return strdup(ret);
 }
 
 /* check_int: checks if cstring is an int
@@ -936,36 +1188,43 @@ int isodigit(char c) {
 }
 
 void bin_to_int(char *bin) {
-    int num = 0;
-    int i = 0;
-
+    uint64_t i = 0;
+    uint64_t p;
     bin = bin+2;
 
     if(converted_word.data_type == signed_32) {
+        converted_word.num_int = 0;
         while(bin[i] != '\0') {
             if(bin[i] == '1') {
-                converted_word.num_int += pow(2, strlen(bin)-i-1);
+                p = pow(2, strlen(bin)-i-1);
+                converted_word.num_int += p;
             }
             i++;
         }
     }else if(converted_word.data_type == unsigned_32) {
+        converted_word.num_uint = 0;
         while(bin[i] != '\0') {
             if(bin[i] == '1') {
-                converted_word.num_uint += pow(2, strlen(bin)-i-1);
+                p = pow(2, strlen(bin)-i-1);
+                converted_word.num_uint += p;
             }
             i++;
         }
     }else if(converted_word.data_type == signed_64) {
+        converted_word.num_ll = 0;
         while(bin[i] != '\0') {
             if(bin[i] == '1') {
-                converted_word.num_ll += pow(2, strlen(bin)-i-1);
+                p = pow(2, strlen(bin)-i-1);
+                converted_word.num_ll += p;
             }
             i++;
         }
     }else if(converted_word.data_type == unsigned_64) {
+        converted_word.num_ull = 0;
         while(bin[i] != '\0') {
             if(bin[i] == '1') {
-                converted_word.num_ull += pow(2, strlen(bin)-i-1);
+                p = pow(2, strlen(bin)-i-1);
+                converted_word.num_ull += p;
             }
             i++;
         }
