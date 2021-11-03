@@ -49,6 +49,8 @@ loWERCASE
 camelCase_oopsTHINGS_GETmessySometimes
 */
 
+#define TWOSCOMP 0
+
 typedef struct {
    yed_frame *frame;
    array_t    strings;
@@ -377,7 +379,7 @@ int convert_find_size(void) {
     if(0) {
 overflow:;
 /*         yed_cerr("Number to convert is too large."); */
-        return 0;
+        return -1;
     }
 
     //Not a number
@@ -415,6 +417,7 @@ void convert_number(int nargs, char** args) {
     int   word_break;
     int   uppercase_last;
     int   extra;
+    int   con;
     yed_frame *frame;
 
     frame = ys->active_frame;
@@ -449,8 +452,8 @@ void convert_number(int nargs, char** args) {
     if(check_oct(converted_word.word)) {
         converted_word.number_type = octal;
     }
-
-    if(convert_find_size() == 1) {
+    con = convert_find_size();
+    if( con == 1) {
         LOG_FN_ENTER();
         if(converted_word.data_type == signed_32) {
             yed_cprint("%d converted to int32_t from %s.", converted_word.num_int, num_type_arr[converted_word.number_type]);
@@ -495,10 +498,11 @@ void convert_number(int nargs, char** args) {
         item = strdup(buffer); array_push(popup_items, item);
 
     /*  Twos Compliment */
+#if TWOSCOMP
         item = print_twos_bits(); array_push(converted_items, item);
         snprintf(buffer, 512, "%11s: %-20s", num_type_arr[4], *((char **)array_item(converted_items, 4)));
         item = strdup(buffer); array_push(popup_items, item);
-
+#endif
         popup.size = array_len(popup_items);
 
         if (ys->active_frame->cur_y + popup.size >= ys->active_frame->top + ys->active_frame->height) {
@@ -510,6 +514,9 @@ void convert_number(int nargs, char** args) {
 
         start_popup(frame, array_len(popup_items), popup_items);
         popup.is_up = 1;
+        return;
+    }else if(con == -1){
+        yed_cerr("Overflow!");
         return;
     }else if(convert_word_at_point_2(frame, frame->cursor_line, frame->cursor_col) == 1) {
         while(array_len(popup_items) > 0) {
@@ -605,7 +612,6 @@ void convert_number(int nargs, char** args) {
         start_popup(frame, array_len(popup_items), popup_items);
         popup.is_up = 1;
         return;
-
     }else{
         return;
     }
