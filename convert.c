@@ -902,7 +902,7 @@ void key_handler(yed_event *event) {
             popup.selection = popup.size-1;
         }
         draw_popup();
-    }else if(event->key == ARROW_DOWN || event->key == SHIFT) {
+    }else if(event->key == ARROW_DOWN || event->key == TAB) {
         event->cancel = 1;
         if(popup.selection < popup.size-1) {
             popup.selection += 1;
