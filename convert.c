@@ -894,7 +894,7 @@ void key_handler(yed_event *event) {
             }
             yed_buff_insert_string(frame->buffer, *((char **)array_item(converted_items, popup.selection)), converted_word.row, word_start);
         }
-    }else if(event->key == ARROW_UP) {
+    }else if(event->key == ARROW_UP || event->key == SHIFT_TAB) {
         event->cancel = 1;
         if(popup.selection > 0) {
             popup.selection -= 1;
@@ -902,7 +902,7 @@ void key_handler(yed_event *event) {
             popup.selection = popup.size-1;
         }
         draw_popup();
-    }else if(event->key == ARROW_DOWN) {
+    }else if(event->key == ARROW_DOWN || event->key == TAB) {
         event->cancel = 1;
         if(popup.selection < popup.size-1) {
             popup.selection += 1;
