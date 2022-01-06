@@ -1,5 +1,6 @@
 #include <yed/plugin.h>
 #include <inttypes.h>
+#include "gui.h"
 
 /*
 Signed 32 MAX
@@ -51,19 +52,6 @@ camelCase_oopsTHINGS_GETmessySometimes
 
 #define TWOSCOMP 0
 
-typedef struct {
-   yed_frame *frame;
-   array_t    strings;
-   array_t    dds;
-   int        start_len;
-   int        is_up;
-   int        row;
-   int        selection;
-   int        size;
-   int        cursor_row;
-   int        cursor_col;
-} convert_popup_t;
-
 static enum {
     integer,
     hexadecimal,
@@ -94,15 +82,16 @@ typedef struct {
     int32_t  num_int;     //stored number s32
 } convert_word;
 
+static yed_plugin       *Self;
 static char             *word_type_arr[6] = {"uppercase", "lowercase", "snakecase", "camelcase", "error"};
 static char             *num_type_arr[6] = {"integer", "hexadecimal", "binary", "octal", "2scomp", "error"};
 static char             *data_type_arr[5] = {"unsigned_64", "signed_64", "unsigned_32", "signed_32", "error"};
-static convert_popup_t   popup;
-static array_t           popup_items;
 static array_t           converted_items;
-static yed_event_handler h_key;
-static int               popup_is_up;
 static convert_word      converted_word;
+static yed_event_handler h_key;
+static yed_event_handler h_mouse;
+static array_t           list_items;
+static yed_gui_list_menu list_menu;
 
 /* Internal Functions*/
 static int         check_int(char *number);
@@ -112,10 +101,7 @@ static int         check_oct(char *number);
 static int         isbdigit(char c);
 static int         isodigit(char c);
 static void        bin_to_int(char *bin);
-static void        draw_popup(void);
-static void        start_popup(yed_frame *frame, int start_len, array_t strings);
-static void        kill_popup(void);
-static char       *print_bits();
+static char       *print_bits(void);
 static char       *print_twos_bits();
 static yed_buffer *get_or_make_buff(void);
 static int         convert_word_at_point(yed_frame *frame, int row, int col);
@@ -126,24 +112,34 @@ static void        print_converted_struct(void);
 static char       *snprintf_int(char *tmp_buffer);
 static char       *snprintf_hex(char *tmp_buffer);
 static char       *snprintf_oct(char *tmp_buffer);
-
+static void        run(void);
 /* Event Handlers */
-static void key_handler(yed_event *event);
+static void _gui_key_handler(yed_event *event);
+static void _gui_mouse_handler(yed_event *event);
 
 /* Global Functions */
 void convert_number(int nargs, char** args);
 
 int yed_plugin_boot(yed_plugin *self) {
-    YED_PLUG_VERSION_CHECK();
+    yed_plugin_request_mouse_reporting(self);
 
-    popup_items = array_make(char *);
-    converted_items = array_make(char *);
+    YED_PLUG_VERSION_CHECK();
+    Self = self;
 
     h_key.kind = EVENT_KEY_PRESSED;
-    h_key.fn   = key_handler;
+    h_key.fn   = _gui_key_handler;
     yed_plugin_add_event_handler(self, h_key);
 
+    h_mouse.kind = EVENT_KEY_PRESSED;
+    h_mouse.fn   = _gui_mouse_handler;
+    yed_plugin_add_event_handler(self, h_mouse);
+
     yed_plugin_set_command(self, "convert-number", convert_number);
+
+    list_items = array_make(char *);
+    yed_gui_init_list_menu(&list_menu, list_items);
+    list_menu.base.is_up = 0;
+    converted_items = array_make(char *);
 
     return 0;
 }
@@ -172,7 +168,6 @@ int convert_find_size(void) {
                     return 1;
                 }else{
                     //s64
-                    yed_cerr("%s", converted_word.word);
                     converted_word.num_ll = strtoll(converted_word.word, NULL, 10);
                     converted_word.data_type = signed_64;
                     return 1;
@@ -234,7 +229,6 @@ int convert_find_size(void) {
                     return 1;
                 }else{
                     //s64
-                    yed_cerr("%s", converted_word.word);
                     converted_word.num_ll = strtoll(converted_word.word, NULL, 16);
                     converted_word.data_type = signed_64;
                     return 1;
@@ -327,7 +321,6 @@ int convert_find_size(void) {
                     return 1;
                 }else{
                     //s64
-                    yed_cerr("%s", converted_word.word);
                     converted_word.num_ll = strtoll(converted_word.word, NULL, 8);
                     converted_word.data_type = signed_64;
                     return 1;
@@ -378,14 +371,12 @@ int convert_find_size(void) {
     //Overflow
     if(0) {
 overflow:;
-/*         yed_cerr("Number to convert is too large."); */
         return -1;
     }
 
     //Not a number
     if(0) {
 no_num:;
-/*         yed_cerr("String can not be converted into a number."); */
         return 0;
     }
 
@@ -432,8 +423,8 @@ void convert_number(int nargs, char** args) {
         return;
     }
 
-    if(popup.is_up) {
-        yed_cerr("Convert popup is already up!");
+    if(list_menu.base.is_up) {
+        yed_cerr("Convert list_menu is already up!");
         return;
     }
 
@@ -454,20 +445,8 @@ void convert_number(int nargs, char** args) {
     }
     con = convert_find_size();
     if( con == 1) {
-        LOG_FN_ENTER();
-        if(converted_word.data_type == signed_32) {
-            yed_cprint("%d converted to int32_t from %s.", converted_word.num_int, num_type_arr[converted_word.number_type]);
-        }else if(converted_word.data_type == unsigned_32) {
-            yed_cprint("%u converted to uint32_t from %s.", converted_word.num_uint, num_type_arr[converted_word.number_type]);
-        }else if(converted_word.data_type == signed_64) {
-            yed_cprint("%lld converted to int64_t from %s.", converted_word.num_ll, num_type_arr[converted_word.number_type]);
-        }else if(converted_word.data_type == unsigned_64) {
-            yed_cprint("%llu converted to uint64_t from %s.", converted_word.num_ull, num_type_arr[converted_word.number_type]);
-        }
-        LOG_EXIT();
-
-        while(array_len(popup_items) > 0) {
-            array_pop(popup_items);
+        while(array_len(list_items) > 0) {
+            array_pop(list_items);
         }
 
         while(array_len(converted_items) > 0) {
@@ -478,49 +457,53 @@ void convert_number(int nargs, char** args) {
         memcpy(tmp_buffer, snprintf_int(tmp_buffer), 512);
         item = strdup(tmp_buffer); array_push(converted_items, item);
         snprintf(buffer, 512, "%11s: %-20s", data_type_arr[converted_word.data_type], *((char **)array_item(converted_items, 0)));
-        item = strdup(buffer); array_push(popup_items, item);
+        item = strdup(buffer); array_push(list_items, item);
 
     /*  Hexadecimal     */
         memcpy(tmp_buffer, snprintf_hex(tmp_buffer), 512);
         item = strdup(tmp_buffer); array_push(converted_items, item);
         snprintf(buffer, 512, "%11s: %-20s", num_type_arr[1], *((char **)array_item(converted_items, 1)));
-        item = strdup(buffer); array_push(popup_items, item);
+        item = strdup(buffer); array_push(list_items, item);
 
     /*  Binary */
         item = print_bits(); array_push(converted_items, item);
         snprintf(buffer, 512, "%11s: %-20s", num_type_arr[2], *((char **)array_item(converted_items, 2)));
-        item = strdup(buffer); array_push(popup_items, item);
+        item = strdup(buffer); array_push(list_items, item);
 
     /*  Octal */
         memcpy(tmp_buffer, snprintf_oct(tmp_buffer), 512);
         item = strdup(tmp_buffer); array_push(converted_items, item);
         snprintf(buffer, 512, "%11s: %-20s", num_type_arr[3], *((char **)array_item(converted_items, 3)));
-        item = strdup(buffer); array_push(popup_items, item);
+        item = strdup(buffer); array_push(list_items, item);
 
     /*  Twos Compliment */
 #if TWOSCOMP
         item = print_twos_bits(); array_push(converted_items, item);
         snprintf(buffer, 512, "%11s: %-20s", num_type_arr[4], *((char **)array_item(converted_items, 4)));
-        item = strdup(buffer); array_push(popup_items, item);
+        item = strdup(buffer); array_push(list_items, item);
 #endif
-        popup.size = array_len(popup_items);
-
-        if (ys->active_frame->cur_y + popup.size >= ys->active_frame->top + ys->active_frame->height) {
-            popup.row = ys->active_frame->cur_y - popup.size - 1;
-        } else {
-            popup.row = ys->active_frame->cur_y;
+        if (list_menu.base.is_up) {
+            yed_delete_event_handler(h_mouse);
         }
-        popup.cursor_col = ys->active_frame->cursor_col;
+        yed_gui_kill(&list_menu);
+        yed_gui_init_list_menu(&list_menu, list_items);
 
-        start_popup(frame, array_len(popup_items), popup_items);
-        popup.is_up = 1;
+        if (ys->active_frame->cur_y + array_len(list_items) >= ys->active_frame->top + ys->active_frame->height) {
+            list_menu.base.top = ys->active_frame->cur_y - array_len(list_items) - 1;
+        } else {
+            list_menu.base.top = ys->active_frame->cur_y;
+        }
+        list_menu.base.left = ys->active_frame->cur_x;
+
+        yed_gui_draw(&list_menu);
+        yed_plugin_add_event_handler(Self, h_mouse);
         return;
     }else if(con == -1){
         yed_cerr("Overflow!");
         return;
     }else if(convert_word_at_point_2(frame, frame->cursor_line, frame->cursor_col) == 1) {
-        while(array_len(popup_items) > 0) {
-            array_pop(popup_items);
+        while(array_len(list_items) > 0) {
+            array_pop(list_items);
         }
 
         while(array_len(converted_items) > 0) {
@@ -534,7 +517,7 @@ void convert_number(int nargs, char** args) {
         }
         item = strdup(tmp_buffer); array_push(converted_items, item);
         snprintf(buffer, 512, "%11s: %-20s", word_type_arr[0], *((char **)array_item(converted_items, 0)));
-        item = strdup(buffer); array_push(popup_items, item);
+        item = strdup(buffer); array_push(list_items, item);
 
     /*  Lowercase     */
         memcpy(tmp_buffer, converted_word.word, 512);
@@ -543,7 +526,7 @@ void convert_number(int nargs, char** args) {
         }
         item = strdup(tmp_buffer); array_push(converted_items, item);
         snprintf(buffer, 512, "%11s: %-20s", word_type_arr[1], *((char **)array_item(converted_items, 1)));
-        item = strdup(buffer); array_push(popup_items, item);
+        item = strdup(buffer); array_push(list_items, item);
 
     /*  Snakecase */
         word_break = 0;
@@ -572,7 +555,7 @@ void convert_number(int nargs, char** args) {
         }
         item = strdup(tmp_buffer); array_push(converted_items, item);
         snprintf(buffer, 512, "%11s: %-20s", word_type_arr[2], *((char **)array_item(converted_items, 2)));
-        item = strdup(buffer); array_push(popup_items, item);
+        item = strdup(buffer); array_push(list_items, item);
 
     /*  Camelcase */
         word_break = 0;
@@ -598,19 +581,23 @@ void convert_number(int nargs, char** args) {
         }
         item = strdup(tmp_buffer); array_push(converted_items, item);
         snprintf(buffer, 512, "%11s: %-20s", word_type_arr[3], *((char **)array_item(converted_items, 3)));
-        item = strdup(buffer); array_push(popup_items, item);
+        item = strdup(buffer); array_push(list_items, item);
 
-        popup.size = array_len(popup_items);
-
-        if (ys->active_frame->cur_y + popup.size >= ys->active_frame->top + ys->active_frame->height) {
-            popup.row = ys->active_frame->cur_y - popup.size - 1;
-        } else {
-            popup.row = ys->active_frame->cur_y;
+        if (list_menu.base.is_up) {
+            yed_delete_event_handler(h_mouse);
         }
-        popup.cursor_col = ys->active_frame->cursor_col;
+        yed_gui_kill(&list_menu);
+        yed_gui_init_list_menu(&list_menu, list_items);
 
-        start_popup(frame, array_len(popup_items), popup_items);
-        popup.is_up = 1;
+        if (ys->active_frame->cur_y + array_len(list_items) >= ys->active_frame->top + ys->active_frame->height) {
+            list_menu.base.top = ys->active_frame->cur_y - array_len(list_items) - 1;
+        } else {
+            list_menu.base.top = ys->active_frame->cur_y;
+        }
+        list_menu.base.left = ys->active_frame->cur_x;
+
+        yed_gui_draw(&list_menu);
+        yed_plugin_add_event_handler(Self, h_mouse);
         return;
     }else{
         return;
@@ -847,70 +834,8 @@ int convert_word_at_point_2(yed_frame *frame, int row, int col) {
     converted_word.row = row;
     converted_word.negative = -1;
     converted_word.is_word = 1;
-    print_converted_struct();
+/*     print_converted_struct(); */
     return 1;
-}
-
-void key_handler(yed_event *event) {
-    yed_line  *line;
-    yed_frame *frame;
-    int        word_len;
-    int        word_start;
-
-    frame = ys->active_frame;
-
-    if (frame == NULL || frame->buffer == NULL) { return; }
-
-    if (ys->interactive_command != NULL) { return; }
-
-    if(!popup.is_up) {return;}
-
-    if (event->key == ESC) {
-        kill_popup();
-        popup.is_up = 0;
-    }else if(event->key == ENTER) {
-        kill_popup();
-        popup.is_up = 0;
-/*      add replace stuff here */
-        if(converted_word.word == NULL) { return;}
-
-        if(converted_word.is_word == 0) {
-            word_len   = converted_word.word_len;
-            word_start = converted_word.word_start;
-            if(converted_word.negative == 1) {
-                word_len++;
-                word_start--;
-            }
-
-            for(int i=word_start+word_len-1; i>word_start-1; i--) {
-                yed_delete_from_line(frame->buffer, converted_word.row, i);
-            }
-            yed_buff_insert_string(frame->buffer, *((char **)array_item(converted_items, popup.selection)), converted_word.row, word_start);
-        }else {
-            word_len   = converted_word.word_len;
-            word_start = converted_word.word_start;
-            for(int i=word_start+word_len-1; i>word_start-1; i--) {
-                yed_delete_from_line(frame->buffer, converted_word.row, i);
-            }
-            yed_buff_insert_string(frame->buffer, *((char **)array_item(converted_items, popup.selection)), converted_word.row, word_start);
-        }
-    }else if(event->key == ARROW_UP || event->key == SHIFT_TAB) {
-        event->cancel = 1;
-        if(popup.selection > 0) {
-            popup.selection -= 1;
-        }else{
-            popup.selection = popup.size-1;
-        }
-        draw_popup();
-    }else if(event->key == ARROW_DOWN || event->key == TAB) {
-        event->cancel = 1;
-        if(popup.selection < popup.size-1) {
-            popup.selection += 1;
-        }else {
-            popup.selection = 0;
-        }
-        draw_popup();
-    }
 }
 
 // Assumes little endian
@@ -1237,80 +1162,54 @@ void bin_to_int(char *bin) {
     }
 }
 
-static void kill_popup(void) {
-    yed_direct_draw_t **dd;
-
-    if (!popup.is_up) { return; }
-
-    free_string_array(popup.strings);
-
-    array_traverse(popup.dds, dd) {
-        yed_kill_direct_draw(*dd);
+static void _gui_key_handler(yed_event *event) {
+    int ret = 0;
+    ret = yed_gui_key_pressed(event, &list_menu);
+    if (ret) {
+        run();
     }
 
-    array_free(popup.dds);
-
-    popup.frame = NULL;
-
-    popup.is_up = 0;
-}
-
-static void draw_popup(void) {
-    yed_direct_draw_t **dd_it;
-    yed_attrs           active;
-    yed_attrs           assoc;
-    yed_attrs           merged;
-    yed_attrs           merged_inv;
-    char              **it;
-    int                 max_width;
-    int                 has_left_space;
-    int                 i;
-    char                buff[512];
-    yed_direct_draw_t  *dd;
-
-    array_traverse(popup.dds, dd_it) {
-        yed_kill_direct_draw(*dd_it);
-    }
-    array_free(popup.dds);
-
-    popup.dds = array_make(yed_direct_draw_t*);
-
-    active = yed_active_style_get_active();
-    assoc  = yed_active_style_get_associate();
-    merged = active;
-    yed_combine_attrs(&merged, &assoc);
-    merged_inv = merged;
-    merged_inv.flags ^= ATTR_INVERSE;
-
-    max_width = 0;
-    array_traverse(popup.strings, it) {
-        max_width = MAX(max_width, strlen(*it));
-    }
-
-    i              = 1;
-    has_left_space = popup.frame->cur_x > popup.frame->left;
-
-    array_traverse(popup.strings, it) {
-        snprintf(buff, sizeof(buff), "%s%*s ", has_left_space ? " " : "", -max_width, *it);
-        dd = yed_direct_draw(popup.row + i,
-                             popup.frame->left + popup.cursor_col - 1 - has_left_space,
-                             i == popup.selection + 1 ? merged_inv : merged,
-                             buff);
-        array_push(popup.dds, dd);
-        i += 1;
+    if (!list_menu.base.is_up) {
+        yed_delete_event_handler(h_mouse);
     }
 }
 
-static void start_popup(yed_frame *frame, int start_len, array_t strings) {
-    kill_popup();
+static void _gui_mouse_handler(yed_event *event) {
+    yed_gui_mouse_pressed(event, &list_menu);
 
-    popup.frame     = frame;
-    popup.strings   = copy_string_array(strings);
-    popup.dds       = array_make(yed_direct_draw_t*);
-    popup.start_len = start_len;
-    popup.selection = 0;
+    if (!list_menu.base.is_up) {
+        yed_delete_event_handler(h_mouse);
+    }
+}
 
-    draw_popup();
+static void run() {
+    yed_frame *frame;
+    int word_len;
+    int word_start;
 
-    popup.is_up = 1;
+    frame = ys->active_frame;
+    if (frame == NULL || frame->buffer == NULL) { return; }
+    if (ys->interactive_command != NULL) { return; }
+    if(converted_word.word == NULL) { return;}
+
+    if(converted_word.is_word == 0) {
+        word_len   = converted_word.word_len;
+        word_start = converted_word.word_start;
+        if(converted_word.negative == 1) {
+            word_len++;
+            word_start--;
+        }
+
+        for(int i=word_start+word_len-1; i>word_start-1; i--) {
+            yed_delete_from_line(frame->buffer, converted_word.row, i);
+        }
+        yed_buff_insert_string(frame->buffer, *((char **)array_item(converted_items, list_menu.selection)), converted_word.row, word_start);
+    }else {
+        word_len   = converted_word.word_len;
+        word_start = converted_word.word_start;
+        for(int i=word_start+word_len-1; i>word_start-1; i--) {
+            yed_delete_from_line(frame->buffer, converted_word.row, i);
+        }
+        yed_buff_insert_string(frame->buffer, *((char **)array_item(converted_items, list_menu.selection)), converted_word.row, word_start);
+    }
 }
