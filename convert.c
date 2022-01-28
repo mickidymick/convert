@@ -1,6 +1,6 @@
 #include <yed/plugin.h>
 #include <inttypes.h>
-#include <yed/gui.h>"
+#include <yed/gui.h>
 
 /*
 Signed 32 MAX
