@@ -113,6 +113,7 @@ static char       *snprintf_int(char *tmp_buffer);
 static char       *snprintf_hex(char *tmp_buffer);
 static char       *snprintf_oct(char *tmp_buffer);
 static void        run(void);
+static void        unload(yed_plugin *self);
 /* Event Handlers */
 static void _gui_key_handler(yed_event *event);
 static void _gui_mouse_handler(yed_event *event);
@@ -140,6 +141,8 @@ int yed_plugin_boot(yed_plugin *self) {
     yed_gui_init_list_menu(&list_menu, list_items);
     list_menu.base.is_up = 0;
     converted_items = array_make(char *);
+
+    yed_plugin_set_unload_fn(self, unload);
 
     return 0;
 }
@@ -400,15 +403,16 @@ void init_convert(void) {
 }
 
 void convert_number(int nargs, char** args) {
-    char *item;
-    char  buffer[512];
-    char  tmp_buffer[512];
-    int   number;
-    int   number_type;
-    int   word_break;
-    int   uppercase_last;
-    int   extra;
-    int   con;
+    char      *item;
+    char       buffer[512];
+    char       tmp_buffer[512];
+    char     **c_it;
+    int        number;
+    int        number_type;
+    int        word_break;
+    int        uppercase_last;
+    int        extra;
+    int        con;
     yed_frame *frame;
 
     frame = ys->active_frame;
@@ -502,13 +506,19 @@ void convert_number(int nargs, char** args) {
         yed_cerr("Overflow!");
         return;
     }else if(convert_word_at_point_2(frame, frame->cursor_line, frame->cursor_col) == 1) {
-        while(array_len(list_items) > 0) {
-            array_pop(list_items);
+        if (array_len(list_items) > 0) {
+            array_traverse(list_items, c_it) {
+                free(*c_it);
+            }
         }
+        array_clear(list_items);
 
-        while(array_len(converted_items) > 0) {
-            array_pop(converted_items);
+        if (array_len(converted_items) > 0) {
+            array_traverse(converted_items, c_it) {
+                free(*c_it);
+            }
         }
+        array_clear(converted_items);
 
     /*  Uppercase */
         memcpy(tmp_buffer, converted_word.word, 512);
@@ -1212,4 +1222,8 @@ static void run() {
         }
         yed_buff_insert_string(frame->buffer, *((char **)array_item(converted_items, list_menu.selection)), converted_word.row, word_start);
     }
+}
+
+static void unload(yed_plugin *self) {
+    free_string_array(list_items);
 }
