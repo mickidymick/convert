@@ -83,6 +83,7 @@ typedef struct {
 } convert_word;
 
 static yed_plugin       *Self;
+static char             *mem_type_arr[6] = {"bytes", "kilobytes", "megabytes", "gigabytes", "terabytes", "error"};
 static char             *word_type_arr[6] = {"uppercase", "lowercase", "snakecase", "camelcase", "error"};
 static char             *num_type_arr[6] = {"integer", "hexadecimal", "binary", "octal", "2scomp", "error"};
 static char             *data_type_arr[5] = {"unsigned_64", "signed_64", "unsigned_32", "signed_32", "error"};
@@ -1185,7 +1186,11 @@ static void _gui_key_handler(yed_event *event) {
 }
 
 static void _gui_mouse_handler(yed_event *event) {
-    yed_gui_mouse_pressed(event, &list_menu);
+    int ret = 0;
+    ret = yed_gui_mouse_pressed(event, &list_menu);
+    if (ret) {
+        run();
+    }
 
     if (!list_menu.base.is_up) {
         yed_delete_event_handler(h_mouse);
